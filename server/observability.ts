@@ -7,7 +7,6 @@ export interface RequestContext {
   startTime: number;
   userId?: string;
   ip?: string;
-  userAgent?: string;
 }
 
 export function generateRequestId(): string {
@@ -79,5 +78,7 @@ function hashId(id: string): string {
 function maskIp(ip: string): string {
   const parts = ip.split('.');
   if (parts.length === 4) return `${parts[0]}.${parts[1]}.*.*`;
+  const v6 = ip.split(':');
+  if (v6.length > 2) return v6.slice(0, 3).join(':') + '::****';
   return ip;
 }

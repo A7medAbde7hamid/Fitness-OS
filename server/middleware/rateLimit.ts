@@ -30,7 +30,7 @@ export function rateLimit(opts: RateLimitOptions) {
   const { windowMs, max, keyFn, message } = opts;
   return (req: Request, res: Response, next: NextFunction): void => {
     // Skip rate limiting in development/test mode (Vite dev server)
-    if (process.env.NODE_ENV !== 'production' && !process.env.RATE_LIMIT_ENABLED) {
+    if (process.env.NODE_ENV === 'development' && !process.env.RATE_LIMIT_ENABLED) {
       return next();
     }
 

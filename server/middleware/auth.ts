@@ -15,7 +15,6 @@ function getSupabaseAdmin(): SupabaseClient | null {
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
-  sessionId?: string;
 }
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {

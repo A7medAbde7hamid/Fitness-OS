@@ -276,7 +276,7 @@ async function handleImageMessage(
 
     const res = await fetch('http://localhost:3000/api/ai/analyze-food', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer whatsapp_internal' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.WHATSAPP_INTERNAL_TOKEN || 'whatsapp_internal'}` },
       body: JSON.stringify({ imageBase64, mimeType, language: lang, mode: 'image' }),
     });
 

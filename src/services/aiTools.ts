@@ -12,6 +12,7 @@ import { NutritionService } from './nutrition';
 import { ActivityService } from './activity';
 import { FoodAnalysisService } from './foodAnalysisService';
 import { MealConfirmationService } from './mealConfirmationService';
+import { WorkoutService } from './workout';
 import {
   MealType,
   UserProfile,
@@ -625,7 +626,6 @@ export const WriteTools: AIToolDefinition<any>[] = [
     schema: WorkoutInputSchema,
     execute: (args: WorkoutInput, userId, language) => {
       const isAr = language === 'ar';
-      const { WorkoutService } = require('./workout');
 
       let exercises;
       if (args.exercises && args.exercises.length > 0) {

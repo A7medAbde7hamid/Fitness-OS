@@ -6,6 +6,7 @@
 
 import { FoodItem, Meal, MealType } from '../types';
 import { AppStorageRepository } from '../db/storage';
+import { NutritionService } from './nutrition';
 import {
   FoodAnalysisResult,
   ConfidenceLevel,
@@ -254,7 +255,6 @@ export class MealConfirmationService {
     meal: Meal
   ): void {
     // Log the meal using existing NutritionService
-    const { NutritionService } = require('./nutrition');
     NutritionService.logMeal(userId, {
       mealType: meal.mealType,
       items: meal.items,

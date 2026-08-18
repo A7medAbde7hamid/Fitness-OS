@@ -3,10 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
-  version: string;
   timestamp: string;
   uptime: number;
-  environment: string;
   checks: Record<string, CheckResult>;
 }
 
@@ -17,7 +15,6 @@ interface CheckResult {
 }
 
 const startTime = Date.now();
-const APP_VERSION = process.env.npm_package_version || '1.0.0';
 
 export async function healthCheck(_req: Request, res: Response): Promise<void> {
   const result = await runHealthChecks();
@@ -39,20 +36,19 @@ export async function healthAi(_req: Request, res: Response): Promise<void> {
 
 export async function healthWhatsapp(_req: Request, res: Response): Promise<void> {
   const check = await checkWhatsApp();
-  res.status(200).json(check);
+  const httpStatus = check.status === 'error' ? 503 : 200;
+  res.status(httpStatus).json(check);
 }
 
 async function runHealthChecks(): Promise<HealthStatus> {
   const checks: Record<string, CheckResult> = {};
 
-  const [dbCheck, aiCheck, waCheck] = await Promise.allSettled([
+  const [dbCheck, waCheck] = await Promise.allSettled([
     checkDatabase(),
-    checkAI(),
     checkWhatsApp(),
   ]);
 
   checks.database = dbCheck.status === 'fulfilled' ? dbCheck.value : { status: 'error', message: 'Check failed' };
-  checks.ai = aiCheck.status === 'fulfilled' ? aiCheck.value : { status: 'error', message: 'Check failed' };
   checks.whatsapp = waCheck.status === 'fulfilled' ? waCheck.value : { status: 'error', message: 'Check failed' };
 
   const statuses = Object.values(checks).map(c => c.status);
@@ -62,10 +58,8 @@ async function runHealthChecks(): Promise<HealthStatus> {
 
   return {
     status: overall,
-    version: APP_VERSION,
     timestamp: new Date().toISOString(),
     uptime: Math.floor((Date.now() - startTime) / 1000),
-    environment: process.env.NODE_ENV || 'development',
     checks,
   };
 }
@@ -80,10 +74,10 @@ async function checkDatabase(): Promise<CheckResult> {
     const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
     const { error } = await supabase.from('profiles').select('id').limit(1);
     const latencyMs = Date.now() - start;
-    if (error) return { status: 'error', latencyMs, message: error.message };
+    if (error) return { status: 'error', latencyMs, message: 'Database query failed' };
     return { status: 'ok', latencyMs };
-  } catch (err) {
-    return { status: 'error', latencyMs: Date.now() - start, message: err instanceof Error ? err.message : 'Unknown' };
+  } catch {
+    return { status: 'error', latencyMs: Date.now() - start, message: 'Connection failed' };
   }
 }
 

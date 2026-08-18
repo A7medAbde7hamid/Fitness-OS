@@ -8,7 +8,7 @@ interface MockMessage {
 }
 
 const sentMessages: MockMessage[] = [];
-let webhookVerifyToken = 'test_verify_token';
+let webhookVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'test_verify_token';
 
 export class MockProvider implements WhatsAppProvider {
   async sendText(to: string, text: string): Promise<{ messageId: string; success: boolean }> {

@@ -12,6 +12,7 @@ import { handleWebhookGet, handleWebhookPost } from './server/whatsapp/webhook';
 import { getWhatsAppStatus, connectWhatsApp, disconnectWhatsApp, generateLinkToken } from './server/whatsapp/api';
 import { healthCheck, healthDb, healthAi, healthWhatsapp } from './server/health';
 import { generateRequestId, logRequest } from './server/observability';
+import { sanitizeUserInput } from './server/aiProtection';
 
 dotenv.config();
 
@@ -98,7 +99,7 @@ async function createApp() {
 
       const contents = (messages || []).map((m: any) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
+        parts: [{ text: sanitizeUserInput(m.content || '') }],
       }));
 
       const systemInstruction = `You are AI Fitness OS, a personalized AI fitness and nutrition coach.
@@ -117,11 +118,15 @@ RULES:
 
       const tools = [{ functionDeclarations: toolDefinitions }];
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
-        contents,
-        config: { systemInstruction, temperature: 0.7, tools },
-      });
+      const AI_TIMEOUT_MS = 25_000;
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents,
+          config: { systemInstruction, temperature: 0.7, tools },
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI request timed out')), AI_TIMEOUT_MS)),
+      ]);
 
       const candidate = response.candidates?.[0];
       const part = candidate?.content?.parts?.[0];

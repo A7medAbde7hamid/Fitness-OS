@@ -1,14 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com; font-src 'self' data:;");
   res.removeHeader('X-Powered-By');
   next();
+}
+
+function maskIp(ip: string): string {
+  const v4 = ip.split('.');
+  if (v4.length === 4) return `${v4[0]}.${v4[1]}.*.*`;
+  const v6 = ip.split(':');
+  if (v6.length > 2) return v6.slice(0, 3).join(':') + '::****';
+  return ip;
 }
 
 export function requestLogger(req: Request, _res: Response, next: NextFunction): void {
@@ -27,7 +36,7 @@ export function requestLogger(req: Request, _res: Response, next: NextFunction):
       url,
       status: _res.statusCode,
       duration,
-      ip,
+      ip: ip ? maskIp(ip) : undefined,
     }));
   });
 
@@ -43,12 +52,9 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }));
 
   const statusCode = (err as any).statusCode || 500;
-  const safeMessage = statusCode === 500
-    ? 'An internal error occurred. Please try again.'
-    : err.message;
 
   res.status(statusCode).json({
-    error: safeMessage,
-    requestId: `req_${Date.now().toString(36)}`,
+    error: 'An internal error occurred. Please try again.',
+    requestId: 'req_' + crypto.randomUUID().slice(0, 12),
   });
 }

@@ -69,11 +69,13 @@ export const syncLogWorkoutSchema = z.object({
   idempotencyKey: z.string().min(1),
 });
 
+const syncOperationSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('log_weight'), payload: syncLogWeightSchema.omit({ idempotencyKey: true }), idempotencyKey: z.string().min(1), operationId: z.string().min(1) }),
+  z.object({ type: z.literal('log_activity'), payload: syncLogActivitySchema.omit({ idempotencyKey: true }), idempotencyKey: z.string().min(1), operationId: z.string().min(1) }),
+  z.object({ type: z.literal('log_meal'), payload: syncLogMealSchema.omit({ idempotencyKey: true }), idempotencyKey: z.string().min(1), operationId: z.string().min(1) }),
+  z.object({ type: z.literal('log_workout'), payload: syncLogWorkoutSchema.omit({ idempotencyKey: true }), idempotencyKey: z.string().min(1), operationId: z.string().min(1) }),
+]);
+
 export const syncBatchSchema = z.object({
-  operations: z.array(z.object({
-    type: z.enum(['log_weight', 'log_activity', 'log_meal', 'log_workout']),
-    payload: z.record(z.string(), z.unknown()),
-    idempotencyKey: z.string().min(1),
-    operationId: z.string().min(1),
-  })).min(1).max(50),
+  operations: z.array(syncOperationSchema).min(1).max(50),
 });
