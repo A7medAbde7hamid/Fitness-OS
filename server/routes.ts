@@ -147,7 +147,7 @@ RULES:
           }
         } catch (toolErr: any) {
           return res.json({
-            reply: text + ` ${toolErr?.message || 'Tool execution failed'}`,
+            reply: text + ' ' + (isAr ? 'حدث خطأ في تنفيذ الأداة.' : 'A tool error occurred.'),
             source: 'gemini_api',
             toolResults: [],
           });
@@ -165,6 +165,7 @@ RULES:
   app.post('/api/ai/analyze-food', requireAuth, aiLimiter, async (req: AuthenticatedRequest, res) => {
     try {
       const { description, imageBase64, mimeType, language, mode } = req.body;
+      const sanitizedDescription = typeof description === 'string' ? sanitizeUserInput(description) : description;
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
@@ -216,7 +217,7 @@ Rules:
       } else if (mode === 'combined' && description) {
         promptText = isAr ? `الصورة تحتوي على طعام. الوصف الإضافي: "${description}". حلل وقدم التقديرات الغذائية.` : `The image contains food. Additional description: "${description}". Analyze and provide nutritional estimates.`;
       } else {
-        promptText = `Analyze this food description and return structured nutritional estimates.\nFood: "${description || ''}"`;
+        promptText = `Analyze this food description and return structured nutritional estimates.\nFood: "${sanitizedDescription || ''}"`;
       }
       parts.push({ text: promptText });
 
@@ -362,6 +363,12 @@ Rules:
       const { convId } = req.params;
       const userId = req.userId!;
       const { role, content, toolName, toolPayload } = req.body;
+      if (!role || !content || typeof content !== 'string') {
+        return res.status(400).json({ error: 'role and content required.' });
+      }
+      if (!['user', 'assistant', 'system'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role.' });
+      }
       const module = await import('../src/db/storage');
       const conversation = module.AppStorageRepository.getConversation(userId, convId);
       if (!conversation) {
