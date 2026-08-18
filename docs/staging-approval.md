@@ -2,19 +2,21 @@
 
 **Version**: 1.0.0-rc.1
 **Date**: August 18, 2026
-**Status**: STAGING BLOCKED (pending real deployment)
+**Status**: STAGING BLOCKED (pending deployment and migration)
 
 ---
 
-## Deployment Information
+## Staging Environment
 
 | Field | Value |
 |-------|-------|
 | RC Version | 1.0.0-rc.1 |
+| Supabase Project | fitness-os |
+| Project ID | hroghkokafsyxdzprvem |
+| Region | EU Central (Frankfurt) |
+| Supabase URL | https://hroghkokafsyxdzprvem.supabase.co |
 | Staging URL | [NOT YET DEPLOYED] |
-| Deployment Commit | [pending] |
-| Deployment Time | [pending] |
-| Supabase Project | [pending] |
+| Deployment Commit | 99d4a9c |
 | Migration Version | 20260818000000 |
 
 ---
@@ -29,75 +31,102 @@
 | Production build | PASS | `npm run build` clean |
 | Security scan | PASS | No secrets in source/dist |
 | Staging E2E tests | CREATED | 6 test files ready |
-| Deployment scripts | CREATED | deploy.ts, migrate.ts, post-deploy.ts |
+| Deployment scripts | CREATED | deploy.ts, migrate.ts, apply-migrations.ts, post-deploy.ts |
+| Staging workflow | CREATED | .github/workflows/staging.yml with proper secrets |
+
+---
+
+## GitHub Actions Secrets Required
+
+Configure these in **Settings → Secrets and variables → Actions**:
+
+| Secret Name | Description | Value |
+|-------------|-------------|-------|
+| `STAGING_SUPABASE_URL` | Supabase project URL | `https://hroghkokafsyxdzprvem.supabase.co` |
+| `STAGING_SUPABASE_ANON_KEY` | Supabase anon/publishable key | [From Supabase Dashboard] |
+| `STAGING_SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | [From Supabase Dashboard → Settings → API] |
+| `STAGING_GEMINI_API_KEY` | Gemini API key (optional) | [If AI testing needed] |
+
+**DO NOT commit these secrets to the repository.**
+
+---
+
+## Migration Steps
+
+### Option 1: Via Supabase Dashboard (Recommended)
+
+1. Go to https://supabase.com/dashboard/project/hroghkokafsyxdzprvem/sql
+2. Run each migration file in order:
+   - `20260817000000_initial_schema.sql`
+   - `20260817000001_meals_summaries_conversations.sql`
+   - `20260818000000_whatsapp_integration.sql`
+
+### Option 2: Via Script
+
+```bash
+# Set environment
+export SUPABASE_URL=https://hroghkokafsyxdzprvem.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+
+# Apply migrations
+npx tsx scripts/apply-migrations.ts
+```
+
+### Expected Tables After Migration
+
+- profiles
+- goals
+- user_preferences
+- measurements
+- meals
+- food_items
+- activities
+- workouts
+- workout_exercises
+- ai_conversations
+- ai_messages
+- daily_summaries
+- whatsapp_connections
+- whatsapp_message_log
+- pending_whatsapp_meals
 
 ---
 
 ## Deployment Steps
 
-### 1. Create Staging Supabase Project
+### 1. Apply Migrations
 
 ```bash
-# Create a new Supabase project (separate from production)
-# Project name: ai-fitness-os-staging
-# Region: same as intended production
+export SUPABASE_URL=https://hroghkokafsyxdzprvem.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+npx tsx scripts/apply-migrations.ts
 ```
 
-### 2. Apply Migrations
+### 2. Configure Environment
+
+Copy `.env.staging.example` to `.env.staging` and fill in:
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_ANON_KEY` (or `VITE_SUPABASE_ANON_KEY`)
+- `GEMINI_API_KEY` (if testing AI)
+
+### 3. Deploy Application
 
 ```bash
-# Set staging credentials
-export SUPABASE_URL=https://<staging-project>.supabase.co
-export SUPABASE_SERVICE_ROLE_KEY=<staging-service-role-key>
-
-# Run migrations
-npx tsx scripts/migrate.ts
-```
-
-### 3. Configure Environment Variables
-
-Set these in your deployment platform (Vercel, Netlify, Cloud Run, etc.):
-
-```bash
-# Required
-SUPABASE_URL=https://<staging-project>.supabase.co
-SUPABASE_ANON_KEY=<staging-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<staging-service-role-key>
-VITE_SUPABASE_URL=https://<staging-project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<staging-anon-key>
-GEMINI_API_KEY=<gemini-key>
-
-# Staging-specific
-WHATSAPP_PROVIDER=mock
-RATE_LIMIT_ENABLED=true
-APP_URL=https://staging.yourdomain.com
-NODE_ENV=production
-```
-
-### 4. Deploy Application
-
-```bash
-# Build and deploy
-npx tsx scripts/deploy.ts --env staging
-
-# Or manually
+# Build
 npm run build
-# Deploy dist/ to your platform
+
+# Deploy dist/ to your hosting platform
 ```
 
-### 5. Run Validation
+### 4. Run Validation
 
 ```bash
-# Set staging URL
-export STAGING_URL=https://staging.yourdomain.com
+export STAGING_URL=<your-deployed-url>
 
-# Run validation script
-npx tsx scripts/validate-staging.ts
-
-# Run post-deploy checks
+# Health checks
 npx tsx scripts/post-deploy.ts --url=$STAGING_URL
 
-# Run E2E tests
+# E2E tests
 STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.ts
 ```
 
@@ -113,6 +142,16 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 | GET /health/db | [ ] PENDING | - | - |
 | GET /health/ai | [ ] PENDING | - | - |
 | GET /health/whatsapp | [ ] PENDING | - | - |
+
+### Database
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Schema matches | [ ] PENDING | - |
+| RLS policies active | [ ] PENDING | - |
+| Indexes exist | [ ] PENDING | - |
+| No production data | [ ] PENDING | - |
+| Migrations applied | [ ] PENDING | - |
 
 ### E2E Tests
 
@@ -132,17 +171,6 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 | Rate limiting | [ ] PENDING | - |
 | No secrets in bundle | [ ] PENDING | - |
 | Security headers | [ ] PENDING | - |
-| No API keys in client | [ ] PENDING | - |
-
-### Database
-
-| Check | Status | Notes |
-|-------|--------|-------|
-| Schema matches | [ ] PENDING | - |
-| RLS policies active | [ ] PENDING | - |
-| Indexes exist | [ ] PENDING | - |
-| No production data | [ ] PENDING | - |
-| Migrations applied | [ ] PENDING | - |
 
 ### AI
 
@@ -151,7 +179,6 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 | Normal question | [ ] PENDING | - |
 | Tool execution | [ ] PENDING | - |
 | Image analysis | [ ] PENDING | - |
-| Timeout handling | [ ] PENDING | - |
 | No client-side keys | [ ] PENDING | - |
 
 ### WhatsApp
@@ -160,10 +187,8 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 |-------|--------|-------|
 | Webhook verification | [ ] PENDING | - |
 | Text message | [ ] PENDING | - |
-| Image message | [ ] PENDING | - |
 | Duplicate handling | [ ] PENDING | - |
-| Arabic reply | [ ] PENDING | - |
-| English reply | [ ] PENDING | - |
+| Arabic/English reply | [ ] PENDING | - |
 
 ### PWA
 
@@ -172,60 +197,6 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 | manifest.json | [ ] PENDING | - |
 | Service worker | [ ] PENDING | - |
 | Offline fallback | [ ] PENDING | - |
-| Install prompt | [ ] PENDING | - |
-| Icons | [ ] PENDING | - |
-
-### Performance
-
-| Metric | Value | Target |
-|--------|-------|--------|
-| Initial load | [ ] PENDING | < 3s |
-| Dashboard load | [ ] PENDING | < 2s |
-| AI response | [ ] PENDING | < 10s |
-| Health latency | [ ] PENDING | < 500ms |
-
----
-
-## Manual QA Checklist
-
-### Viewports
-
-| Viewport | EN | AR | Notes |
-|----------|----|----|-------|
-| 375x812 (iPhone X) | [ ] | [ ] | - |
-| 390x844 (iPhone 12) | [ ] | [ ] | - |
-| 414x896 (iPhone 11) | [ ] | [ ] | - |
-| Desktop | [ ] | [ ] | - |
-
-### Features
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Landing page | [ ] PENDING | - |
-| Auth flow | [ ] PENDING | - |
-| Dashboard | [ ] PENDING | - |
-| Weight logging | [ ] PENDING | - |
-| Meal logging | [ ] PENDING | - |
-| Activity logging | [ ] PENDING | - |
-| Progress charts | [ ] PENDING | - |
-| AI Coach | [ ] PENDING | - |
-| WhatsApp linking | [ ] PENDING | - |
-| Arabic RTL | [ ] PENDING | - |
-| English LTR | [ ] PENDING | - |
-| Keyboard nav | [ ] PENDING | - |
-| Bottom navigation | [ ] PENDING | - |
-| Modals | [ ] PENDING | - |
-| Offline banner | [ ] PENDING | - |
-| Sync state | [ ] PENDING | - |
-| Error states | [ ] PENDING | - |
-
----
-
-## Known Issues
-
-| Issue | Severity | Workaround | Status |
-|-------|----------|------------|--------|
-| None identified | - | - | - |
 
 ---
 
@@ -234,16 +205,15 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 | Gate | Status | Verified By | Date |
 |------|--------|-------------|------|
 | Pre-deployment checks | PASS | automated | 2026-08-18 |
+| Supabase project created | PASS | user confirmed | 2026-08-18 |
+| Migrations applied | [ ] PENDING | - | - |
 | Deployment | [ ] PENDING | - | - |
 | Health endpoints | [ ] PENDING | - | - |
 | E2E tests | [ ] PENDING | - | - |
 | Security checks | [ ] PENDING | - | - |
 | AI verification | [ ] PENDING | - | - |
 | WhatsApp sandbox | [ ] PENDING | - | - |
-| Offline sync | [ ] PENDING | - | - |
-| PWA validation | [ ] PENDING | - | - |
 | Manual QA | [ ] PENDING | - | - |
-| Performance | [ ] PENDING | - | - |
 
 ---
 
@@ -251,34 +221,36 @@ STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.
 
 **STAGING BLOCKED**
 
-Reason: Real staging environment not yet deployed. All validation tooling is ready. A human must:
+The staging Supabase project is created but migrations have not been applied and the application is not deployed. A human must:
 
-1. Create a staging Supabase project
-2. Apply migrations
-3. Deploy to a hosting platform
-4. Configure environment variables
-5. Run the validation commands
-6. Complete the manual QA checklist
-7. Update this document with results
-8. Change status to STAGING APPROVED (if all pass) or keep STAGING BLOCKED
+1. Apply migrations to https://hroghkokafsyxdzprvem.supabase.co
+2. Deploy application to a hosting platform
+3. Configure GitHub Actions secrets
+4. Run validation commands
+5. Complete manual QA checklist
+6. Update this document with results
+7. Change status to STAGING APPROVED (if all pass)
 
 ---
 
 ## Appendix: Validation Commands
 
 ```bash
-# Full validation
-npx tsx scripts/validate-staging.ts
-
-# Post-deploy checks
-npx tsx scripts/post-deploy.ts --url=https://staging.yourdomain.com
-
-# E2E tests
-STAGING_URL=https://staging.yourdomain.com npx playwright test --config=playwright.staging.config.ts
+# Apply migrations
+export SUPABASE_URL=https://hroghkokafsyxdzprvem.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=<your-key>
+npx tsx scripts/apply-migrations.ts
 
 # Health checks
-curl -f https://staging.yourdomain.com/health
-curl -f https://staging.yourdomain.com/health/db
-curl -f https://staging.yourdomain.com/health/ai
-curl -f https://staging.yourdomain.com/health/whatsapp
+curl -f $STAGING_URL/health
+curl -f $STAGING_URL/health/db
+curl -f $STAGING_URL/health/ai
+curl -f $STAGING_URL/health/whatsapp
+
+# E2E tests
+STAGING_URL=$STAGING_URL npx playwright test --config=playwright.staging.config.ts
+
+# Full validation
+npx tsx scripts/validate-staging.ts
+npx tsx scripts/post-deploy.ts --url=$STAGING_URL
 ```
