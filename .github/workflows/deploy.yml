@@ -1,0 +1,105 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Pre-deploy Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Security scan
+        run: |
+          ! grep -r "DefaultPassword" src/ server/ dist/ --include="*.ts" --include="*.tsx" || exit 1
+          ! grep -r "sk-\|rk-\|AKIA" src/ server/ dist/ || exit 1
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 3
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: staging
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploy to staging environment..."
+          echo "Add your deployment commands here:"
+          echo "  - Vercel: vercel --prebuilt --token ${{ secrets.VERCEL_TOKEN }}"
+          echo "  - Netlify: netlify deploy --dir=dist --prod"
+          echo "  - Cloud Run: gcloud run deploy ..."
+          echo "  - Custom: your deploy script"
+
+      - name: Post-deploy health check
+        run: |
+          echo "Running health check..."
+          echo "Add your health check URL here:"
+          echo "  curl -f https://staging.yourdomain.com/health || exit 1"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-staging]
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Deploy to production
+        run: |
+          echo "Deploy to production environment..."
+          echo "Add your deployment commands here"
+
+      - name: Post-deploy health check
+        run: |
+          echo "Running production health check..."
+          echo "Add your health check URL here:"
+          echo "  curl -f https://yourdomain.com/health || exit 1"

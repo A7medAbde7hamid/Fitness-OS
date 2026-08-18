@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Security scan - no secrets in source
+        run: |
+          echo "Scanning for hardcoded secrets..."
+          ! grep -r "DefaultPassword" src/ server/ --include="*.ts" --include="*.tsx" || exit 1
+          ! grep -r "sk-\|rk-\|AKIA" src/ server/ --include="*.ts" --include="*.tsx" || exit 1
+          echo "No secrets found in source."
+
+      - name: Security scan - no secrets in dist
+        run: |
+          if [ -d "dist" ]; then
+            echo "Scanning dist for secrets..."
+            ! grep -r "DefaultPassword" dist/ || exit 1
+            ! grep -r "sk-\|rk-\|AKIA" dist/ || exit 1
+            echo "No secrets found in dist."
+          fi
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7

@@ -1,0 +1,189 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: 'Staging URL'
+        required: true
+        default: 'https://staging.yourdomain.com'
+
+env:
+  STAGING_URL: ${{ github.event.inputs.staging_url || 'https://staging.yourdomain.com' }}
+
+jobs:
+  validate:
+    name: Pre-deploy Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Security scan
+        run: |
+          ! grep -r "DefaultPassword\|sk-\|rk-\|AKIA" src/ server/ dist/ --include="*.ts" --include="*.tsx" || exit 1
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-dist
+          path: dist/
+          retention-days: 3
+
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 10
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-dist
+          path: dist/
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging: $STAGING_URL"
+          echo "Add your deployment commands here:"
+          echo "  - Vercel: vercel --prebuilt --token ${{ secrets.VERCEL_TOKEN }}"
+          echo "  - Netlify: netlify deploy --dir=dist --prod"
+          echo "  - Cloud Run: gcloud run deploy ..."
+          echo "  - Custom: your deploy script"
+
+  health-check:
+    name: Post-deploy Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          echo "Checking health at $STAGING_URL/health"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL/health")
+          echo "Health status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed!"
+            exit 1
+          fi
+
+      - name: Verify endpoints
+        run: |
+          echo "Verifying staging endpoints..."
+          for endpoint in /health /health/db /health/ai /health/whatsapp /manifest.json /offline.html; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL$endpoint")
+            echo "  $endpoint: $STATUS"
+            if [ "$STATUS" != "200" ] && [ "$STATUS" != "503" ]; then
+              echo "  WARNING: Unexpected status"
+            fi
+          done
+
+  e2e-staging:
+    name: E2E Against Staging
+    runs-on: ubuntu-latest
+    needs: health-check
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run staging E2E tests
+        env:
+          STAGING_URL: ${{ env.STAGING_URL }}
+        run: npx playwright test --config=playwright.staging.config.ts
+
+      - name: Run staging health tests
+        env:
+          STAGING_URL: ${{ env.STAGING_URL }}
+        run: npx playwright test e2e/staging-health.spec.ts --config=playwright.staging.config.ts
+
+      - name: Run staging security tests
+        env:
+          STAGING_URL: ${{ env.STAGING_URL }}
+        run: npx playwright test e2e/staging-security.spec.ts --config=playwright.staging.config.ts
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-test-results
+          path: test-results/
+          retention-days: 7
+
+  validation-report:
+    name: Staging Validation Report
+    runs-on: ubuntu-latest
+    needs: [e2e-staging]
+    if: always()
+
+    steps:
+      - name: Generate report
+        run: |
+          echo "========================================"
+          echo "  Staging Validation Report"
+          echo "========================================"
+          echo ""
+          echo "Version: $(node -p "require('./package.json').version")"
+          echo "Staging URL: $STAGING_URL"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "Jobs:"
+          echo "  Validate: ${{ needs.validate.result }}"
+          echo "  Deploy: ${{ needs.deploy.result }}"
+          echo "  Health Check: ${{ needs.health-check.result }}"
+          echo "  E2E: ${{ needs.e2e-staging.result }}"
+          echo ""
+          if [ "${{ needs.e2e-staging.result }}" = "success" ]; then
+            echo "STATUS: STAGING APPROVED"
+          else
+            echo "STATUS: STAGING BLOCKED"
+          fi
+          echo "========================================"

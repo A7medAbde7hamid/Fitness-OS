@@ -1,0 +1,6 @@
+{
+  "name": "AI Fitness OS",
+  "description": "Bilingual Personal AI Fitness & Wellness OS with an AI Coach",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

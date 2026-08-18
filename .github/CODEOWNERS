@@ -1,0 +1,6 @@
+# Default code owner for all files
+* @your-github-username
+
+# Server-side code requires additional review
+server/ @your-github-username
+supabase/ @your-github-username
