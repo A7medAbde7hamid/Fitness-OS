@@ -300,12 +300,10 @@ Rules:
 
   app.post('/api/conversations', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const { userId, title, titleAr } = req.body;
-      if (!userId || !title) {
-        return res.status(400).json({ error: 'userId and title required.' });
-      }
-      if (req.userId !== userId) {
-        return res.status(403).json({ error: 'Access denied.' });
+      const userId = req.userId!;
+      const { title, titleAr } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: 'title required.' });
       }
       const module = await import('../src/db/storage');
       const conv = {
@@ -362,8 +360,13 @@ Rules:
   app.post('/api/conversations/:convId/messages', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { convId } = req.params;
+      const userId = req.userId!;
       const { role, content, toolName, toolPayload } = req.body;
       const module = await import('../src/db/storage');
+      const conversation = module.AppStorageRepository.getConversation(userId, convId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found.' });
+      }
       const message = {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
         conversationId: convId,
