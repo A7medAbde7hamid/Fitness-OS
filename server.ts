@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -15,9 +14,6 @@ import { healthCheck, healthDb, healthAi, healthWhatsapp } from './server/health
 import { generateRequestId, logRequest } from './server/observability';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function createApp() {
   const app = express();
