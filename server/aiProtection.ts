@@ -56,7 +56,10 @@ export function trackAiFailure(meta: AiRequestMeta, error: string): void {
 }
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  // Arabic/CJK characters use ~1-2 tokens each; Latin uses ~1 token per 4 chars.
+  const nonLatinChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
+  const latinChars = text.length - nonLatinChars;
+  return Math.ceil(nonLatinChars * 1.5 + latinChars / 4);
 }
 
 export function sanitizeUserInput(input: string): string {

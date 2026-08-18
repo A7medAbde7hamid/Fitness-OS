@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { generateRequestId, logRequest } from '../observability';
 
 export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -12,32 +13,19 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   next();
 }
 
-function maskIp(ip: string): string {
-  const v4 = ip.split('.');
-  if (v4.length === 4) return `${v4[0]}.${v4[1]}.*.*`;
-  const v6 = ip.split(':');
-  if (v6.length > 2) return v6.slice(0, 3).join(':') + '::****';
-  return ip;
-}
-
 export function requestLogger(req: Request, _res: Response, next: NextFunction): void {
   const start = Date.now();
-  const { method, url } = req;
+  const requestId = generateRequestId();
   const ip = req.ip || req.socket.remoteAddress;
-  const ts = new Date().toISOString();
 
   _res.on('finish', () => {
-    const duration = Date.now() - start;
-    const level = _res.statusCode >= 400 ? 'WARN' : 'INFO';
-    console.log(JSON.stringify({
-      level,
-      ts,
-      method,
-      url,
-      status: _res.statusCode,
-      duration,
-      ip: ip ? maskIp(ip) : undefined,
-    }));
+    logRequest({
+      requestId,
+      method: req.method,
+      path: req.url,
+      startTime: start,
+      ip: ip || undefined,
+    }, _res.statusCode, Date.now() - start);
   });
 
   next();
