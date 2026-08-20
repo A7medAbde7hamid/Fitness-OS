@@ -7,6 +7,7 @@ import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ConnectionStatus } from './components/common/ConnectionStatus';
 import { LandingView } from './components/landing/LandingView';
+import { AuthView } from './components/auth/AuthView';
 import { WeightLogModal } from './components/modals/WeightLogModal';
 import { ActivityLogModal } from './components/modals/ActivityLogModal';
 
@@ -60,9 +61,12 @@ const QuickActionModals: React.FC = () => {
 
 const MainRouter: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
-  const { activeTab } = useNavigation();
+  const { activeView, activeTab } = useNavigation();
 
   if (!isAuthenticated) {
+    if (activeView === 'auth') {
+      return <AuthView />;
+    }
     return <LandingView />;
   }
 

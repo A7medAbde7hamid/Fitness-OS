@@ -268,24 +268,14 @@ async function handleImageMessage(
     }
 
     const imageBase64 = data.toString('base64');
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      await sendReply(message.senderId, lang, lang === 'ar' ? 'مش قادر أحلل الصورة دلوقتي.' : 'Cannot analyze images right now.');
-      return { success: true, replied: true };
-    }
 
-    const res = await fetch('http://localhost:3000/api/ai/analyze-food', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.WHATSAPP_INTERNAL_TOKEN || 'whatsapp_internal'}` },
-      body: JSON.stringify({ imageBase64, mimeType, language: lang, mode: 'image' }),
+    const { analyzeFoodServer } = await import('../services/foodAnalysis');
+    const analysis = await analyzeFoodServer({
+      imageBase64,
+      mimeType,
+      language: lang,
+      mode: 'image',
     });
-
-    if (!res.ok) {
-      await sendReply(message.senderId, lang, lang === 'ar' ? 'مقدرتش أحلل الصورة، ممكن تاني؟' : 'Could not analyze the image, please try again.');
-      return { success: true, replied: true };
-    }
-
-    const analysis = await res.json();
     const items = analysis.items || [];
     const totalCal = analysis.totalCalories || 0;
     const confidence = analysis.confidence || 0;

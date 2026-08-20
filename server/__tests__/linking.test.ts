@@ -100,9 +100,9 @@ describe('WhatsAppLinkingService', () => {
   });
 
   describe('generateLinkingToken', () => {
-    it('should generate a unique token', () => {
-      const t1 = WhatsAppLinkingService.generateLinkingToken('p1');
-      const t2 = WhatsAppLinkingService.generateLinkingToken('p2');
+    it('should generate a unique token', async () => {
+      const t1 = await WhatsAppLinkingService.generateLinkingToken('p1');
+      const t2 = await WhatsAppLinkingService.generateLinkingToken('p2');
       expect(t1).toBeTruthy();
       expect(t2).toBeTruthy();
       expect(t1).not.toBe(t2);
@@ -110,22 +110,35 @@ describe('WhatsAppLinkingService', () => {
   });
 
   describe('verifyLinkingToken', () => {
-    it('should verify a valid token', () => {
-      const token = WhatsAppLinkingService.generateLinkingToken('p1');
-      const result = WhatsAppLinkingService.verifyLinkingToken(token);
+    it('should verify a valid token', async () => {
+      const token = await WhatsAppLinkingService.generateLinkingToken('p1');
+      // Mock the select query to return the token
+      (chain.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        data: { token, profile_id: 'p1', expires_at: new Date(Date.now() + 60000).toISOString(), used: false },
+        error: null,
+      });
+      const result = await WhatsAppLinkingService.verifyLinkingToken(token);
       expect(result).toBeTruthy();
       expect(result?.profileId).toBe('p1');
       expect(result?.used).toBe(true);
     });
 
-    it('should reject an invalid token', () => {
-      expect(WhatsAppLinkingService.verifyLinkingToken('bad')).toBeNull();
+    it('should reject an invalid token', async () => {
+      (chain.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: null, error: { code: 'PGRST116' } });
+      expect(await WhatsAppLinkingService.verifyLinkingToken('bad')).toBeNull();
     });
 
-    it('should reject a used token', () => {
-      const token = WhatsAppLinkingService.generateLinkingToken('p1');
-      WhatsAppLinkingService.verifyLinkingToken(token);
-      expect(WhatsAppLinkingService.verifyLinkingToken(token)).toBeNull();
+    it('should reject a used token', async () => {
+      const token = await WhatsAppLinkingService.generateLinkingToken('p1');
+      // Mock first verification to succeed
+      (chain.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        data: { token, profile_id: 'p1', expires_at: new Date(Date.now() + 60000).toISOString(), used: false },
+        error: null,
+      });
+      await WhatsAppLinkingService.verifyLinkingToken(token);
+      // After marking as used, query with eq('used', false) returns no rows
+      (chain.single as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: null, error: { code: 'PGRST116' } });
+      expect(await WhatsAppLinkingService.verifyLinkingToken(token)).toBeNull();
     });
   });
 

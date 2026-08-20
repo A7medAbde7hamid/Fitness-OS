@@ -41,7 +41,8 @@ export const BottomNavigation: React.FC = () => {
       id="bottom-navigation"
       role="navigation"
       aria-label={t('nav.main') || 'Main navigation'}
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#050505]/90 backdrop-blur-2xl px-2 py-1.5 pb-safe"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#050505]/90 backdrop-blur-2xl px-2 py-1.5"
+      style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
     >
       <div className="max-w-md mx-auto flex items-center justify-around">
         {navItems.map((item) => {

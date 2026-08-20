@@ -73,7 +73,21 @@ export class SyncQueueService {
     try {
       const pending = await IndexedDBRepository.getSyncQueueByStatus('pending');
 
-      for (const op of pending) {
+      // Filter to current user only to prevent cross-user data leak
+      const currentUser = (() => {
+        try {
+          const data = localStorage.getItem('ai_fitness_os_current_user');
+          return data ? JSON.parse(data) : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      const userPending = currentUser
+        ? pending.filter(op => op.userId === currentUser.id)
+        : pending;
+
+      for (const op of userPending) {
         op.status = 'syncing';
         await IndexedDBRepository.updateSyncOperation(op);
 

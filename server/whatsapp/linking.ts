@@ -14,7 +14,7 @@ function getDb(): SupabaseClient {
   return supabaseAdmin;
 }
 
-const linkingTokens = new Map<string, WhatsAppLinkingToken>();
+const LINKING_TOKENS_TABLE = 'whatsapp_linking_tokens';
 
 export class WhatsAppLinkingService {
   static async getConnectionByExternalId(externalUserId: string): Promise<WhatsAppConnection | null> {
@@ -105,21 +105,46 @@ export class WhatsAppLinkingService {
       .eq('external_user_id', externalUserId);
   }
 
-  static generateLinkingToken(profileId: string): string {
+  static async generateLinkingToken(profileId: string): Promise<string> {
+    const db = getDb();
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    linkingTokens.set(token, { token, profileId, expiresAt, used: false });
+
+    await db.from(LINKING_TOKENS_TABLE).insert({
+      token,
+      profile_id: profileId,
+      expires_at: expiresAt,
+      used: false,
+      created_at: new Date().toISOString(),
+    });
+
     return token;
   }
 
-  static verifyLinkingToken(token: string): WhatsAppLinkingToken | null {
-    const entry = linkingTokens.get(token);
-    if (!entry || entry.used || new Date(entry.expiresAt) < new Date()) {
-      if (entry) entry.used = true;
+  static async verifyLinkingToken(token: string): Promise<WhatsAppLinkingToken | null> {
+    const db = getDb();
+    const { data, error } = await db
+      .from(LINKING_TOKENS_TABLE)
+      .select('*')
+      .eq('token', token)
+      .eq('used', false)
+      .single();
+
+    if (error || !data) return null;
+
+    if (new Date(data.expires_at) < new Date()) {
+      await db.from(LINKING_TOKENS_TABLE).update({ used: true }).eq('token', token);
       return null;
     }
-    entry.used = true;
-    return entry;
+
+    await db.from(LINKING_TOKENS_TABLE).update({ used: true }).eq('token', token);
+
+    return {
+      token: data.token,
+      profileId: data.profile_id,
+      expiresAt: data.expires_at,
+      used: true,
+    };
   }
 
   static hashPhone(phone: string): string {

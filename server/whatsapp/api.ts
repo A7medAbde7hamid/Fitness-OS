@@ -61,7 +61,7 @@ export async function disconnectWhatsApp(req: AuthenticatedRequest, res: Respons
 export async function generateLinkToken(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const profileId = req.userId!;
-    const token = WhatsAppLinkingService.generateLinkingToken(profileId);
+    const token = await WhatsAppLinkingService.generateLinkingToken(profileId);
     res.json({ token, expiresIn: 900 });
   } catch {
     res.status(500).json({ error: 'Token generation failed' });

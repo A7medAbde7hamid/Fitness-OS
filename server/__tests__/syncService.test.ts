@@ -3,24 +3,35 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Track mock call count to sequence responses
 let selectCallCount = 0;
 
-const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+const mockInsert = vi.fn().mockResolvedValue({ error: null });
 const mockSingle = vi.fn();
+const mockEq = vi.fn();
+const mockSelect = vi.fn();
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: vi.fn() },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            single: mockSingle,
-          })),
-          single: mockSingle,
-        })),
-      })),
-      upsert: mockUpsert,
+    from: vi.fn((table: string) => ({
+      select: vi.fn((cols?: string) => {
+        if (table === 'workout_exercises') {
+          // workout exercises uses upsert
+          return { eq: mockEq, upsert: vi.fn().mockResolvedValue({ error: null }) };
+        }
+        // select returns eq chain for conflict detection
+        mockSelect(table, cols);
+        return { eq: mockEq };
+      }),
+      insert: mockInsert,
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     })),
   })),
+}));
+
+// Make eq() chainable and end in single()
+const singleResult = vi.fn();
+mockEq.mockImplementation(() => ({
+  eq: mockEq,
+  single: singleResult,
 }));
 
 import { SyncService } from '../services/syncService';
@@ -32,13 +43,17 @@ describe('SyncService', () => {
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
 
-    // Reset upsert to success by default
-    mockUpsert.mockResolvedValue({ error: null });
+    // Reset mocks to success by default
+    mockInsert.mockResolvedValue({ error: null });
+    mockEq.mockImplementation(() => ({
+      eq: mockEq,
+      single: singleResult,
+    }));
   });
 
   describe('upsertMeasurement', () => {
     it('returns conflict when record already exists', async () => {
-      mockSingle.mockResolvedValue({ data: { id: 'm1', weight_kg: 75, measured_at: '2026-08-18' }, error: null });
+      singleResult.mockResolvedValueOnce({ data: { id: 'm1', weight_kg: 75, measured_at: '2026-08-18' }, error: null });
 
       const result = await SyncService.upsertMeasurement('user_1', {
         id: 'm1', weightKg: 75, measuredAt: '2026-08-18',
@@ -50,7 +65,7 @@ describe('SyncService', () => {
     });
 
     it('inserts new record successfully', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
+      singleResult.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
 
       const result = await SyncService.upsertMeasurement('user_1', {
         id: 'm1', weightKg: 75, measuredAt: '2026-08-18', notes: 'morning',
@@ -61,8 +76,8 @@ describe('SyncService', () => {
     });
 
     it('returns error on database failure', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
-      mockUpsert.mockRejectedValue(new Error('Connection refused'));
+      singleResult.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
+      mockInsert.mockRejectedValueOnce(new Error('Connection refused'));
 
       const result = await SyncService.upsertMeasurement('user_1', {
         id: 'm1', weightKg: 75, measuredAt: '2026-08-18',
@@ -75,7 +90,7 @@ describe('SyncService', () => {
 
   describe('upsertActivity', () => {
     it('returns conflict when record exists', async () => {
-      mockSingle.mockResolvedValue({ data: { id: 'a1' }, error: null });
+      singleResult.mockResolvedValueOnce({ data: { id: 'a1' }, error: null });
 
       const result = await SyncService.upsertActivity('user_1', {
         id: 'a1', activityType: 'running', durationMinutes: 30,
@@ -87,7 +102,7 @@ describe('SyncService', () => {
     });
 
     it('inserts new activity', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
+      singleResult.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
 
       const result = await SyncService.upsertActivity('user_1', {
         id: 'a1', activityType: 'running', durationMinutes: 30,
@@ -100,7 +115,7 @@ describe('SyncService', () => {
 
   describe('upsertMeal', () => {
     it('returns conflict when meal exists', async () => {
-      mockSingle.mockResolvedValue({ data: { id: 'meal_1' }, error: null });
+      singleResult.mockResolvedValueOnce({ data: { id: 'meal_1' }, error: null });
 
       const result = await SyncService.upsertMeal('user_1', {
         id: 'meal_1', name: 'Chicken Salad', mealType: 'lunch',
@@ -113,7 +128,7 @@ describe('SyncService', () => {
     });
 
     it('inserts new meal', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
+      singleResult.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
 
       const result = await SyncService.upsertMeal('user_1', {
         id: 'meal_1', name: 'Chicken Salad', mealType: 'lunch',
@@ -127,7 +142,11 @@ describe('SyncService', () => {
 
   describe('upsertWorkout', () => {
     it('inserts workout with exercises', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'Row not found' } });
+      // 1st single() = conflict check (no conflict)
+      // 2nd single() = get server workout ID for exercises
+      singleResult
+        .mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } })
+        .mockResolvedValueOnce({ data: { id: 'server_w1' }, error: null });
 
       const result = await SyncService.upsertWorkout('user_1', {
         id: 'w1', title: 'Push Day', category: 'Push',
@@ -140,7 +159,7 @@ describe('SyncService', () => {
     });
 
     it('returns conflict when workout exists', async () => {
-      mockSingle.mockResolvedValue({ data: { id: 'w1' }, error: null });
+      singleResult.mockResolvedValueOnce({ data: { id: 'w1' }, error: null });
 
       const result = await SyncService.upsertWorkout('user_1', {
         id: 'w1', title: 'Push Day', category: 'Push',
@@ -155,7 +174,7 @@ describe('SyncService', () => {
   describe('processBatch', () => {
     it('processes mixed operation types', async () => {
       // Sequence: first call = no conflict, second call = conflict
-      mockSingle
+      singleResult
         .mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'Row not found' } })
         .mockResolvedValueOnce({ data: { id: 'a1' }, error: null });
 

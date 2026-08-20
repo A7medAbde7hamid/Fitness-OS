@@ -293,6 +293,14 @@ class AuthServiceClass {
       }
     }
 
+    // Clear sync queue to prevent cross-user data leak
+    try {
+      const { IndexedDBRepository } = await import('../db/indexedDb');
+      await IndexedDBRepository.clearSyncQueue();
+    } catch {
+      // Best effort — if IndexedDB is unavailable, queue will be filtered by userId on next process
+    }
+
     AppStorageRepository.setCurrentUser(null);
     this.currentSession = null;
     this.notifyListeners(null, null);

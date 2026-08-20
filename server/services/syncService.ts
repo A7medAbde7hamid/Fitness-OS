@@ -29,7 +29,7 @@ export class SyncService {
         .from('measurements')
         .select('id, weight_kg, measured_at')
         .eq('user_id', userId)
-        .eq('id', data.id)
+        .eq('client_id', data.id)
         .single();
 
       if (existing) {
@@ -40,14 +40,14 @@ export class SyncService {
         };
       }
 
-      const { error } = await db.from('measurements').upsert({
-        id: data.id,
+      const { error } = await db.from('measurements').insert({
         user_id: userId,
+        client_id: data.id,
         weight_kg: data.weightKg,
         measured_at: data.measuredAt,
         notes: data.notes || null,
         idempotency_key: idempotencyKey,
-      }, { onConflict: 'id' });
+      });
 
       if (error) throw error;
       return { success: true };
@@ -66,16 +66,16 @@ export class SyncService {
         .from('activities')
         .select('id')
         .eq('user_id', userId)
-        .eq('id', data.id)
+        .eq('client_id', data.id)
         .single();
 
       if (existing) {
         return { success: true, conflict: true, serverVersion: {} };
       }
 
-      const { error } = await db.from('activities').upsert({
-        id: data.id,
+      const { error } = await db.from('activities').insert({
         user_id: userId,
+        client_id: data.id,
         activity_type: data.activityType,
         duration_minutes: data.durationMinutes,
         calories_burned: data.caloriesBurned,
@@ -84,7 +84,7 @@ export class SyncService {
         logged_at: data.loggedAt,
         source: 'sync',
         idempotency_key: idempotencyKey,
-      }, { onConflict: 'id' });
+      });
 
       if (error) throw error;
       return { success: true };
@@ -103,25 +103,27 @@ export class SyncService {
         .from('meals')
         .select('id')
         .eq('user_id', userId)
-        .eq('id', data.id)
+        .eq('client_id', data.id)
         .single();
 
       if (existing) {
         return { success: true, conflict: true, serverVersion: {} };
       }
 
-      const { error } = await db.from('meals').upsert({
-        id: data.id,
+      const { error } = await db.from('meals').insert({
         user_id: userId,
+        client_id: data.id,
         name: data.name,
         meal_type: data.mealType,
-        calories: data.calories,
-        protein_g: data.proteinG,
-        carbs_g: data.carbsG,
-        fat_g: data.fatG,
+        total_calories: data.calories,
+        total_protein: data.proteinG,
+        total_carbs: data.carbsG,
+        total_fat: data.fatG,
         logged_at: data.loggedAt,
         idempotency_key: idempotencyKey,
-      }, { onConflict: 'id' });
+        ai_analyzed: false,
+        user_confirmed: true,
+      });
 
       if (error) throw error;
       return { success: true };
@@ -141,42 +143,53 @@ export class SyncService {
         .from('workouts')
         .select('id')
         .eq('user_id', userId)
-        .eq('id', data.id)
+        .eq('client_id', data.id)
         .single();
 
       if (existing) {
         return { success: true, conflict: true, serverVersion: {} };
       }
 
-      const { error: workoutError } = await db.from('workouts').upsert({
-        id: data.id,
+      const { error: workoutError } = await db.from('workouts').insert({
         user_id: userId,
+        client_id: data.id,
         title: data.title,
         category: data.category,
         duration_minutes: data.durationMinutes,
         completed: data.completed,
         logged_at: data.loggedAt,
         idempotency_key: idempotencyKey,
-      }, { onConflict: 'id' });
+      });
 
       if (workoutError) throw workoutError;
 
       if (data.exercises && data.exercises.length > 0) {
-        const exercises = data.exercises.map((ex, idx) => ({
-          workout_id: data.id,
-          user_id: userId,
-          exercise_name: ex.name,
-          order_index: idx,
-          sets: ex.sets,
-          reps: ex.reps,
-          weight_kg: ex.weightKg || null,
-        }));
+        // Get the server-generated workout ID
+        const { data: workoutRow } = await db
+          .from('workouts')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('client_id', data.id)
+          .single();
 
-        const { error: exError } = await db.from('workout_exercises').upsert(exercises, {
-          onConflict: 'workout_id,order_index',
-        });
+        if (workoutRow) {
+          const exercises = data.exercises.map((ex, idx) => ({
+            workout_id: workoutRow.id,
+            user_id: userId,
+            exercise_name: ex.name,
+            name: ex.name,
+            order_index: idx,
+            target_sets: ex.sets,
+            target_reps: ex.reps,
+            weight_kg: ex.weightKg || null,
+          }));
 
-        if (exError) throw exError;
+          const { error: exError } = await db.from('workout_exercises').upsert(exercises, {
+            onConflict: 'workout_id,order_index',
+          });
+
+          if (exError) throw exError;
+        }
       }
 
       return { success: true };
